@@ -1,0 +1,46 @@
+# Builds focuskeeper.exe from the tagged source on a GitHub runner and attaches it, with its SHA-256, to the
+# GitHub Release of that tag, plus a build provenance attestation: anyone can check that the published exe came
+# from this code (README: "Verify the download").
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write      # create the release and upload the files
+  id-token: write      # sign the provenance attestation
+  attestations: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.2" # the version pinned in build.ps1: the same exe bytes as a local build
+          cache: false
+
+      - name: Test
+        shell: pwsh
+        run: go test ./...
+
+      - name: Build
+        shell: pwsh
+        run: ./build.ps1 -Version "${{ github.ref_name }}"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: release/focuskeeper.exe
+
+      - name: Publish the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $sum = Get-Content release/SHA256SUMS.txt
+          $notes = "Built by GitHub Actions from commit ${{ github.sha }} (run ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).`n`nSHA-256:`n``````n$sum``````"
+          gh release create "${{ github.ref_name }}" release/focuskeeper.exe release/SHA256SUMS.txt --title "${{ github.ref_name }}" --notes $notes
