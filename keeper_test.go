@@ -382,8 +382,29 @@ func TestTextsComplete(t *testing.T) {
 }
 
 func TestIconDraws(t *testing.T) {
-	px := drawIcon(16, colorOn, true)
+	px := drawIcon(16, colorOn, true, false)
 	if len(px) != 16*16*4 || px[3] != 0 || px[(8*16+8)*4+3] != 255 || px[(8*16+8)*4] != 255 {
 		t.Fatalf("corner should be clear and the centre dot white and opaque")
+	}
+	// away: no dot (the centre is the plain blue), the ring fainter but still lighter than the blue
+	away := drawIcon(16, colorOn, true, true)
+	if c := (8*16 + 8) * 4; away[c] != byte(colorOn&0xff) || away[c+2] != byte(colorOn>>16) {
+		t.Fatalf("away: the centre should be the plain colour, got %v", away[c:c+4])
+	}
+	ringAt := (8*16 + 8 + 4) * 4 // 0.27*16 = 4.3 px right of the centre
+	if !(px[ringAt+2] > away[ringAt+2] && away[ringAt+2] > byte(colorOn>>16)) {
+		t.Fatalf("away ring should be fainter than the focused one, yet visible: %d %d", px[ringAt+2], away[ringAt+2])
+	}
+}
+
+func TestVMFocused(t *testing.T) {
+	w := newWorld(t)
+	w.fg = vmWin
+	if !w.k.vmFocused() {
+		t.Fatalf("the VM window in front: focused")
+	}
+	w.fg = otherWin
+	if w.k.vmFocused() {
+		t.Fatalf("another window in front: away")
 	}
 }

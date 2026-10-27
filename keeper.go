@@ -92,6 +92,12 @@ func (k *keeper) currentMode() string {
 	return k.mode
 }
 
+// vmFocused: the VM window is in front - the tray icon shows it with a white ring and dot, otherwise a faint ring.
+func (k *keeper) vmFocused() bool {
+	target := k.sys.findTarget(k.exe, k.class)
+	return target != 0 && k.sys.foreground() == target
+}
+
 // checkUncovered: the soft mode. VMware gets the focus back when it is visible, not minimized, not in front, and no
 // window above it in the z-order overlaps it - the window that covered it was minimized, closed or moved away. Called
 // softSettle after the last window event (foreground, minimize, show/hide, destroy, move) and by the 1 s safety

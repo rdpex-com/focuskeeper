@@ -6,20 +6,21 @@ import (
 )
 
 // Tray icon, drawn at run time (no resource files): a blue rounded square with a white focus ring and a dot. Grey
-// when paused, amber in the dry mode.
+// when paused, amber in the dry mode. While another window has the focus (away), the ring is faint and the dot gone.
 const (
 	colorOn     = 0x2f6fed
 	colorPaused = 0x8a8f98
 	colorDry    = 0xd08a1e
+	awayRing    = 0.4 // the ring's whiteness while away
 )
 
-func makeIcon(rgb uint32, dot bool) uintptr {
+func makeIcon(rgb uint32, dot, away bool) uintptr {
 	s, _, _ := procGetSystemMetrics.Call(49) // SM_CXSMICON, at the process DPI
 	size := int(s)
 	if size < 16 {
 		size = 16
 	}
-	px := drawIcon(size, rgb, dot)
+	px := drawIcon(size, rgb, dot, away)
 	var bi struct {
 		Size                         uint32
 		Width, Height                int32
@@ -49,8 +50,12 @@ func makeIcon(rgb uint32, dot bool) uintptr {
 }
 
 // drawIcon returns BGRA pixels (straight alpha), 4x4 supersampled.
-func drawIcon(size int, rgb uint32, dot bool) []byte {
+func drawIcon(size int, rgb uint32, dot, away bool) []byte {
 	const ss = 4
+	ringWhite := 1.0
+	if away {
+		ringWhite, dot = awayRing, false
+	}
 	n := float64(size)
 	radius, ring, ringW, dotR := 0.22*n, 0.27*n, 0.09*n, 0.10*n
 	c := n / 2
@@ -67,8 +72,10 @@ func drawIcon(size int, rgb uint32, dot bool) []byte {
 					}
 					cover++
 					d := math.Hypot(fx-c, fy-c)
-					if math.Abs(d-ring) <= ringW/2 || (dot && d <= dotR) {
+					if dot && d <= dotR {
 						white++
+					} else if math.Abs(d-ring) <= ringW/2 {
+						white += ringWhite
 					}
 				}
 			}

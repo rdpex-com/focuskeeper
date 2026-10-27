@@ -66,7 +66,8 @@ Right or left click on the icon:
 - **Dry mode** - only write to the log what it would do (the icon turns amber);
 - **Exit**.
 
-The icon is grey while paused; its tooltip shows the time of the last action. The mode, the VM program and the
+The icon is grey while paused; its tooltip shows the time of the last action. The white ring and dot mean the VM
+window has the focus; a faint ring without the dot - another window has it. The mode, the VM program and the
 language are remembered in `focuskeeper.settings.json` next to the exe.
 
 ## How it works: the two modes

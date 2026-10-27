@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.0
+
+- The tray icon shows where the focus is: a white ring and dot while the virtual machine window is in front, a faint ring without the dot while another window is.
+- `-trace` writes each change of the icon to the log.
+
 ## 1.0.0
 
 First release.

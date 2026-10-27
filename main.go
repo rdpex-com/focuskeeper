@@ -66,10 +66,14 @@ var (
 	k             *keeper
 	trayWnd       uintptr
 	taskbarMsg    uintptr
-	icons         = map[string]uintptr{}
+	icons         = map[string]uintptr{} // "on", "paused", "dry"; with "-away" while the VM window is not in front
+	focused       bool                   // the VM window was in front when the icon was last set
 	winEventProcA = windows.NewCallback(func(hook, event, hwnd uintptr, idObject, idChild int32, thread, ms uint32) uintptr {
 		if idObject != 0 || idChild != 0 { // only windows themselves (OBJID_WINDOW, CHILDID_SELF)
 			return 0
+		}
+		if event == eventSystemForeground {
+			showFocus()
 		}
 		if root, _, _ := procGetAncestor.Call(hwnd, gaRoot); root != hwnd && hwnd != 0 {
 			return 0 // a child window moved inside some app
@@ -138,7 +142,16 @@ func main() {
 	taskbarMsg, _, _ = procRegisterWindowMessage.Call(uintptr(unsafe.Pointer(utf16("TaskbarCreated"))))
 	trayWnd = newWindow("FocusKeeperTray", "focuskeeper", windows.NewCallback(trayProc), 0, 0, 0, rect{})
 	k.self = trayWnd
-	icons["on"], icons["paused"], icons["dry"] = makeIcon(colorOn, true), makeIcon(colorPaused, true), makeIcon(colorDry, false)
+	for _, away := range []bool{false, true} {
+		suffix := ""
+		if away {
+			suffix = "-away"
+		}
+		icons["on"+suffix] = makeIcon(colorOn, true, away)
+		icons["paused"+suffix] = makeIcon(colorPaused, true, away)
+		icons["dry"+suffix] = makeIcon(colorDry, false, away)
+	}
+	focused = k.vmFocused()
 	notify(0x00000000) // NIM_ADD
 	procSetWinEventHook.Call(eventSystemForeground, eventSystemMinimizeEnd, 0, winEventProcA, 0, 0, winEventOutOfContext)
 	procSetWinEventHook.Call(eventObjectDestroy, eventObjectLocation, 0, winEventProcA, 0, 0, winEventOutOfContext)
@@ -164,7 +177,8 @@ func trayProc(hwnd, msg, wparam, lparam uintptr) uintptr {
 		case timerSafety:
 			k.checkShell()
 			k.checkUncovered()
-			notify(0x00000001) // NIM_MODIFY: the tooltip shows the last action's time
+			focused = k.vmFocused()
+			notify(0x00000001) // NIM_MODIFY: the tooltip shows the last action's time and the icon the focus
 		}
 		return 0
 	case msg == wmTray && (lparam == wmRButtonUp || lparam == wmLButtonUp):
@@ -347,6 +361,18 @@ func statusText(paused, dry bool) string {
 	return s
 }
 
+// showFocus: on a foreground change - the icon follows at once when the VM window comes to the front or leaves it.
+func showFocus() {
+	if f := k.vmFocused(); f != focused {
+		focused = f
+		notify(0x00000001) // NIM_MODIFY
+		if k.trace {
+			k.log.write(map[string]any{"ev": "trace", "icon": map[bool]string{true: "focused", false: "away"}[f],
+				"fg": k.sys.describe(k.sys.foreground())})
+		}
+	}
+}
+
 // notify adds, changes or removes the tray icon (Shell_NotifyIconW with NOTIFYICONDATAW).
 func notify(action uintptr) {
 	var nid struct {
@@ -368,14 +394,17 @@ func notify(action uintptr) {
 	nid.Flags = 0x1 | 0x2 | 0x4 // NIF_MESSAGE | NIF_ICON | NIF_TIP
 	nid.CbMsg = wmTray
 	paused, dry := k.settings()
+	name := "on"
 	switch {
 	case paused:
-		nid.Icon = icons["paused"]
+		name = "paused"
 	case dry:
-		nid.Icon = icons["dry"]
-	default:
-		nid.Icon = icons["on"]
+		name = "dry"
 	}
+	if !focused {
+		name += "-away"
+	}
+	nid.Icon = icons[name]
 	k.mu.Lock()
 	last := k.last
 	k.mu.Unlock()
